@@ -49,7 +49,8 @@ __all__ = [
     "SpeedMonitorConfig",
     "WandbConfig",
     "CompilerConfig",
-    "WandbConfig",
+    "AimArgsConfig",
+    "AimConfig",
     "DDPConfig",
     "DistributedStrategy",
     "DDPGradSyncMode",
@@ -668,6 +669,18 @@ class WandbConfig(BaseConfig):
     rank_zero_only: bool = True
     log_interval: int = 1
 
+@dataclass
+class AimArgsConfig(BaseConfig):
+    repeat: int = 60
+    verbosity: int = 2
+
+@dataclass
+class AimConfig(BaseConfig):
+    repo: Optional[str] = None
+    experiment: Optional[str] = None
+    sync_repo: Optional[str] = None
+    sync_args: Optional[AimArgsConfig] = None
+    log_interval: int = 1
 
 @dataclass
 class SpeedMonitorConfig(BaseConfig):
@@ -1123,6 +1136,11 @@ class TrainConfig(BaseConfig):
     wandb: Optional[WandbConfig] = None
     """
     Weights & Biases configuration.
+    """
+
+    aim: Optional[AimConfig] = None
+    """
+    AIM configuration.
     """
 
     speed_monitor: SpeedMonitorConfig = field(default_factory=SpeedMonitorConfig)

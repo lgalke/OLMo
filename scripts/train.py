@@ -7,6 +7,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Optional, TextIO
 
+import aimrun
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -114,6 +115,10 @@ def main(cfg: TrainConfig) -> None:
             tags=cfg.wandb.tags,
             config=cfg.asdict(exclude=["wandb"]),
         )
+
+    # Maybe start aim run.
+    if cfg.aim.experiment is not None:
+        aimrun.init(repo=cfg.aim.repo, experiment=cfg.aim.experiment, args=cfg.asdict(), sync_repo=cfg.aim.sync_repo, sync_args=cfg.aim.sync_args.__dict__)
 
     barrier()
 

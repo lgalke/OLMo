@@ -9,6 +9,7 @@ import os
 import random
 import shutil
 import time
+import aimrun
 from collections import deque
 from contextlib import nullcontext
 from dataclasses import dataclass, field
@@ -976,21 +977,22 @@ class Trainer:
         )
 
     def should_log_optim_metrics_this_step(self) -> bool:
-        if self.cfg.wandb is None:
+        if self.cfg.wandb is None and self.cfg.aim.experiment is None:
             # We only log optimizer-specific metrics to W&B, since there are usually too many metrics
             # to log to the console.
             return False
         optim_log_interval = self.cfg.optimizer.metrics_log_interval
+        tracker_log_interval = self.cfg.wandb.log_interval if self.cfg.aim.experiment is None else self.cfg.aim.log_interval
         if optim_log_interval is None:
-            optim_log_interval = self.cfg.wandb.log_interval
+            optim_log_interval = tracker_log_interval
         else:
-            optim_log_interval = max(optim_log_interval, self.cfg.wandb.log_interval)
+            optim_log_interval = max(optim_log_interval, tracker_log_interval)
         return self.global_step % optim_log_interval == 0
 
     def should_log_this_step(self) -> bool:
         if self.global_step % self.cfg.console_log_interval == 0:
             return True
-        elif self.cfg.wandb is not None and self.global_step % self.cfg.wandb.log_interval == 0:
+        elif (self.cfg.wandb is not None or self.cfg.aim.experiment is not None) and self.global_step % self.cfg.wandb.log_interval == 0:
             return True
         else:
             return False
@@ -1109,6 +1111,8 @@ class Trainer:
             eval_metrics = self.eval()
             if wandb.run is not None:
                 wandb.log(eval_metrics, step=self.global_step)
+            if self.cfg.aim.experiment is not None:
+                aimrun.track(eval_metrics, step=self.global_step)
 
         # Set model to 'train' mode.
         self.dist_model.train()
@@ -1124,6 +1128,8 @@ class Trainer:
             self.log_metrics_to_console("Pre-train system metrics", sys_metrics)
             if wandb.run is not None:
                 wandb.log(sys_metrics, step=0)
+            if self.cfg.aim.experiment is not None:
+                aimrun.track(sys_metrics, step=0)
 
         # Python Profiler stuff
         if self.cfg.python_profiling:
@@ -1234,6 +1240,11 @@ class Trainer:
                         and self.global_step % self.cfg.wandb.log_interval == 0
                     ):
                         wandb.log(metrics, step=self.global_step)
+                    if (
+                        self.cfg.aim.experiment is not None
+                        and self.global_step % self.cfg.aim.log_interval == 0
+                    ):
+                        aimrun.track(metrics, step=self.global_step)
 
                     # Check if/when run should be canceled.
                     if not cancel_initiated and self.global_step % self.cfg.canceled_check_interval == 0:
@@ -1300,6 +1311,8 @@ class Trainer:
                         # Log metrics to W&B.
                         if wandb.run is not None:
                             wandb.log(eval_metrics, step=self.global_step)
+                        if self.cfg.aim.experiment is not None:
+                            aimrun.track(eval_metrics, step=self.global_step)
 
                         # Reset speed monitor so that we don't count the time taken to run evaluations.
                         speed_monitor.reset()
@@ -1370,6 +1383,8 @@ class Trainer:
             gc.disable()
         if wandb.run is not None:
             wandb.finish(exit_code=exit_code, quiet=True)
+        if self.cfg.aim.experiment is not None:
+            aimrun.close()
 
     def __enter__(self) -> Trainer:
         return self
