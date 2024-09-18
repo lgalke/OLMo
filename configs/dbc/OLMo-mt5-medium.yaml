@@ -1,4 +1,4 @@
-run_name: OLMo-1B-dbc-8k-standard-adjusted
+run_name: OLMo-mt5-medium
 seed: 6198
 dry_run: false
 
@@ -7,7 +7,7 @@ wandb: null
 #   project: olmo-small
 
 aim:
-  repo: /home/jps/OLMo
+  repo: /leonardo_work/EUHPC_D07_063/OLMo
   experiment: ${run_name} # null to deactivate
   sync_repo: aim://aim.caracal.imada.sdu.dk
   sync_args:
@@ -26,16 +26,16 @@ model:
   # n_heads: 4 #16
   # n_layers: 4 #16
   # mlp_ratio: 2 #8
-  # # medium
-  # d_model: 768 #2048
-  # n_heads: 6 #16
-  # n_layers: 6 #16
-  # mlp_ratio: 2 #8
-  # standard
-  d_model: 2048
-  n_heads: 16
-  n_layers: 16
-  mlp_ratio: 8
+  # medium
+  d_model: 768 #2048
+  n_heads: 6 #16
+  n_layers: 6 #16
+  mlp_ratio: 2 #8
+  # # standard
+  # d_model: 2048
+  # n_heads: 16
+  # n_layers: 16
+  # mlp_ratio: 8
   weight_tying: true
   alibi: false
   rope: true
@@ -52,26 +52,26 @@ model:
   activation_type: swiglu
   residual_dropout: 0.0
   embedding_dropout: 0.0
-  max_sequence_length: 2048 # dbc-8k
+  # max_sequence_length: 2048 # dbc-8k
   # max_sequence_length: 305 # dbc
   # max_sequence_length: 713 # mistral
-  # max_sequence_length: 563 # mt5
-  # vocab_size: 250100 # mt5
+  max_sequence_length: 563 # mt5
+  vocab_size: 250100 # mt5
   # vocab_size: 32768 # mistral
   # vocab_size: 54716 # dbc
-  vocab_size: 4717 # dbc-8k
+  # vocab_size: 4717 # dbc-8k
   # vocab_size: 50280
-  # embedding_size: 250100 # mt5
+  embedding_size: 250100 # mt5
   # embedding_size: 32768 # mistral
   # embedding_size: 54716 # dbc
-  embedding_size: 4717 # dbc-8k
+  # embedding_size: 4717 # dbc-8k
   # eos_token_id: 2 # mistral
-  # eos_token_id: 1 # mt5
-  eos_token_id: 2 # dbc-8k
+  eos_token_id: 1 # mt5
+  # eos_token_id: 2 # dbc-8k
   # eos_token_id: 2 # dbc
   # pad_token_id: 0 # mistral
-  # pad_token_id: 0 # mt5
-  pad_token_id: 3 # dbc-8k
+  pad_token_id: 0 # mt5
+  # pad_token_id: 3 # dbc-8k
   # pad_token_id: 3 # dbc
   init_device: meta
   init_fn: mitchell
@@ -94,9 +94,9 @@ scheduler:
   alpha_f: 0.1
 
 tokenizer:
-  # identifier: google/mt5-base
+  identifier: /leonardo_work/EUHPC_D07_063/OLMo/olmo_data/tokenizers/mt5-base
   # identifier: tokenizers/dbc/tokenizer.json
-  identifier: tokenizers/dbc-8k/tokenizer.json
+  # identifier: tokenizers/dbc-8k/tokenizer.json
   # identifier: mistralai/Mistral-7B-Instruct-v0.3
   # identifier: tokenizers/allenai_eleuther-ai-gpt-neox-20b-pii-special.json
   truncate_direction: right
@@ -114,7 +114,7 @@ load_path: null
 
 max_duration: 739_328  # 3.1T tokens
 global_train_batch_size: 2048
-device_train_microbatch_size: 8
+device_train_microbatch_size: 64
 # global_train_batch_size: 2048
 # device_train_microbatch_size: 8
 
@@ -143,8 +143,8 @@ evaluators:
         dbc-val:
           # - /home/jps/dolma/dbc/v0/tokens/part-1-00000.npy
           # - /home/jps/dolma/dbc/v0/tokens-mistral-val/part-0-00000.npy
-          - /home/jps/dolma/dbc/v0/tokens-dbc-8k-val/part-0-00000.npy
-          # - /home/jps/dolma/dbc/v0/tokens-mt5-val/part-0-00000.npy
+          # - /home/jps/dolma/dbc/v0/tokens-dbc-8k-val/part-0-00000.npy
+          - /leonardo_work/EUHPC_D07_063/dolma/dbc/v0/tokens-mt5-val/part-0-00000.npy
           # - /home/jps/dolma/dbc/v0/tokens-dbc-val/part-0-00000.npy
   # - label: v3-small-ppl-validation
   #   data:
@@ -255,10 +255,10 @@ data:
   timeout: 0
   paths:
     # - /home/jps/dolma/dbc/v0/tokens/part-0-00000.npy
-    # - /home/jps/dolma/dbc/v0/tokens-mt5-train/part-0-00000.npy
+    - /leonardo_work/EUHPC_D07_063/dolma/dbc/v0/tokens-mt5-train/part-0-00000.npy
     # - /home/jps/dolma/dbc/v0/tokens-mistral-train/part-0-00000.npy
-    - /home/jps/dolma/dbc/v0/tokens-dbc-8k-train/part-0-00000.npy
-    - /home/jps/dolma/dbc/v0/tokens-dbc-8k-train/part-0-00001.npy
+    # - /home/jps/dolma/dbc/v0/tokens-dbc-8k-train/part-0-00000.npy
+    # - /home/jps/dolma/dbc/v0/tokens-dbc-8k-train/part-0-00001.npy
     # - /home/jps/dolma/dbc/v0/tokens-dbc-train/part-0-00000.npy
     # - /home/jps/OLMo/part-000-00000.npy
     # - https://olmo-data.org/preprocessed/olmo-mix/v1_5/gpt-neox-20b-pii-special/part-000-00000.npy
