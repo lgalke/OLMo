@@ -118,7 +118,7 @@ def main(cfg: TrainConfig) -> None:
 
     # Maybe start aim run.
     if cfg.aim.experiment is not None:
-        aimrun.init(repo=cfg.aim.repo, experiment=cfg.aim.experiment, args=cfg.asdict(), sync_repo=cfg.aim.sync_repo, sync_args=cfg.aim.sync_args.__dict__)
+        aimrun.init(repo=cfg.aim.repo, experiment=cfg.aim.experiment, args=cfg.asdict(), sync_repo=cfg.aim.sync_repo, sync_args=cfg.aim.sync_args.__dict__, run_hash=cfg.aim.run_hash)
 
     barrier()
 

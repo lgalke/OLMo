@@ -681,6 +681,7 @@ class AimConfig(BaseConfig):
     sync_repo: Optional[str] = None
     sync_args: Optional[AimArgsConfig] = None
     log_interval: int = 1
+    run_hash: Optional[str] = None
 
 @dataclass
 class SpeedMonitorConfig(BaseConfig):
