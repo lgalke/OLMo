@@ -138,6 +138,11 @@ def main(cfg: TrainConfig) -> None:
     log.info(f"Total number of parameters: {olmo_model.num_params():,d}")
     log.info(f"Number of non-embedding parameters: {olmo_model.num_params(include_embedding=False):,d}")
     log.info(f"Peak GPU Memory (MB) before {cfg.distributed_strategy}: {int(peak_gpu_memory() or 0)}")
+    if cfg.bitlinear:
+        log.info(f"Bitlinearizing model to 1.58 bits: {olmo_model}")
+        from bitlinear import bitlinearize
+        bitlinearize(olmo_model, replacements=[x.__dict__ for x in cfg.bitlinear])
+        log.info(f"Bilinear model: {olmo_model}")
 
     olmo_model.set_activation_checkpointing(cfg.activation_checkpointing)
 

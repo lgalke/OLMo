@@ -51,6 +51,7 @@ __all__ = [
     "CompilerConfig",
     "AimArgsConfig",
     "AimConfig",
+    "BitLinearConfig",
     "DDPConfig",
     "DistributedStrategy",
     "DDPGradSyncMode",
@@ -684,6 +685,14 @@ class AimConfig(BaseConfig):
     run_hash: Optional[str] = None
 
 @dataclass
+class BitLinearConfig(BaseConfig):
+    weight_range: Optional[float] = None
+    weight_measure: Optional[str] = None
+    activation_range: Optional[float] = None
+    activation_measure: Optional[str] = None
+    match_name: Optional[str] = None
+
+@dataclass
 class SpeedMonitorConfig(BaseConfig):
     window_size: int = 100
     gpu_flops_available: Optional[Union[float, int]] = None
@@ -1142,6 +1151,11 @@ class TrainConfig(BaseConfig):
     aim: Optional[AimConfig] = None
     """
     AIM configuration.
+    """
+
+    bitlinear: Optional[List[BitLinearConfig]] = None
+    """
+    BitLinear configuration.
     """
 
     speed_monitor: SpeedMonitorConfig = field(default_factory=SpeedMonitorConfig)
