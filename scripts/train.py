@@ -56,6 +56,10 @@ def main(cfg: TrainConfig) -> None:
         raise OLMoConfigurationError("--run_name is required")
     log_extra_field("run_name", cfg.run_name)
 
+    # Maybe start aim run.
+    if cfg.aim.experiment is not None:
+        aimrun.init(repo=cfg.aim.repo, experiment=cfg.aim.experiment, args=cfg.asdict(), sync_repo=cfg.aim.sync_repo, sync_args=cfg.aim.sync_args.__dict__, run_hash=cfg.aim.run_hash)
+
     # Sanity check
     if (cfg.reset_optimizer_state or cfg.reset_trainer_state) and cfg.load_path is None:
         log.warning(
@@ -115,10 +119,6 @@ def main(cfg: TrainConfig) -> None:
             tags=cfg.wandb.tags,
             config=cfg.asdict(exclude=["wandb"]),
         )
-
-    # Maybe start aim run.
-    if cfg.aim.experiment is not None:
-        aimrun.init(repo=cfg.aim.repo, experiment=cfg.aim.experiment, args=cfg.asdict(), sync_repo=cfg.aim.sync_repo, sync_args=cfg.aim.sync_args.__dict__, run_hash=cfg.aim.run_hash)
 
     barrier()
 
