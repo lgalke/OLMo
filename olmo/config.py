@@ -691,6 +691,7 @@ class BitLinearConfig(BaseConfig):
     activation_range: Optional[float] = None
     activation_measure: Optional[str] = None
     match_name: Optional[str] = None
+    quantization_warmup_steps: Optional[int] = None
 
 @dataclass
 class SpeedMonitorConfig(BaseConfig):
@@ -896,6 +897,11 @@ class ActivationCheckpointingStrategy(StrEnum):
 class TrainConfig(BaseConfig):
     """
     OLMo training configuration.
+    """
+
+    quantization_warmup_steps: Optional[int] = None
+    """
+    The number of steps to warm up quantization for.
     """
 
     run_name: Optional[str] = None

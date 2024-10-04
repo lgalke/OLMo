@@ -18,6 +18,7 @@ from pathlib import Path
 from pstats import SortKey
 from typing import Any, Callable, Deque, Dict, List, Optional, TextIO, Tuple, Union
 
+from bitlinear import set_lambda_
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -819,6 +820,19 @@ class Trainer:
 
     def train_step(self, batch: Dict[str, Any], reduce_global_loss: bool = True) -> Dict[str, float]:
         metrics: Dict[str, float] = {}
+
+        # Set quantization rate lambda_.
+        if self.cfg.quantization_warmup_steps is not None:
+            if self.global_step < self.cfg.quantization_warmup_steps:
+                def sigmoid(x):
+                    return 1 / (1 + math.exp(-x))
+                lambda_ = 2*(sigmoid(self.global_step*5/self.cfg.quantization_warmup_steps))-1
+                log.info(f"Setting lambda_ to {lambda_}")
+                set_lambda_(self.dist_model, lambda_=1.0)
+            elif self.global_step == self.cfg.quantization_warmup_steps:
+                lambda_ = 1.0
+                log.info(f"Setting lambda_ to {lambda_}")
+                set_lambda_(self.dist_model, lambda_=1.0)
 
         # Write data-indices to file.
         if self.indices_file is not None and "index" in batch:
