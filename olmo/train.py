@@ -827,11 +827,10 @@ class Trainer:
                 def sigmoid(x):
                     return 1 / (1 + math.exp(-x))
                 lambda_ = 2*(sigmoid(self.global_step*5/self.cfg.quantization_warmup_steps))-1
-                log.info(f"Setting lambda_ to {lambda_}")
-                set_lambda_(self.dist_model, lambda_=1.0)
+                log.info(f"Setting lambda_ to {lambda_} for step {self.global_step}.")
+                set_lambda_(self.dist_model, lambda_=lambda_)
             elif self.global_step == self.cfg.quantization_warmup_steps:
-                lambda_ = 1.0
-                log.info(f"Setting lambda_ to {lambda_}")
+                log.info(f"Finishing warmup at step {self.global_step}, setting lambda_ to 1.0.")
                 set_lambda_(self.dist_model, lambda_=1.0)
 
         # Write data-indices to file.
