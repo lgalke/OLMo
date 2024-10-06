@@ -823,13 +823,14 @@ class Trainer:
 
         # Set quantization rate lambda_.
         if self.cfg.quantization_warmup_steps is not None:
-            if self.global_step < self.cfg.quantization_warmup_steps:
+            current_step = self.global_step-self.cfg.quantization_warmup_offset
+            if current_step < self.cfg.quantization_warmup_steps:
                 def sigmoid(x):
                     return 1 / (1 + math.exp(-x))
-                lambda_ = 2*(sigmoid(self.global_step*5/self.cfg.quantization_warmup_steps))-1
+                lambda_ = 2*(sigmoid(current_step*5/self.cfg.quantization_warmup_steps))-1
                 log.info(f"Setting lambda_ to {lambda_} for step {self.global_step}.")
                 set_lambda_(self.dist_model, lambda_=lambda_)
-            elif self.global_step == self.cfg.quantization_warmup_steps:
+            elif current_step == self.cfg.quantization_warmup_steps:
                 log.info(f"Finishing warmup at step {self.global_step}, setting lambda_ to 1.0.")
                 set_lambda_(self.dist_model, lambda_=1.0)
 

@@ -903,6 +903,11 @@ class TrainConfig(BaseConfig):
     The number of steps to warm up quantization for.
     """
 
+    quantization_warmup_offset: int = 0
+    """
+    The number of steps to warm up quantization for.
+    """
+
     run_name: Optional[str] = None
     """
     The name of the run.
