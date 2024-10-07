@@ -312,6 +312,7 @@ def main(cfg: TrainConfig) -> None:
                 sharded_checkpointer=cfg.load_path_sharded_checkpointer,
             )
             log.info("Checkpoint successfully loaded")
+            log.info(f"Loaded model: {trainer.dist_model}")
 
             # If we have to, set a new scheduler:
             if cfg.reset_optimizer_state and not cfg.reset_trainer_state:
