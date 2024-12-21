@@ -7,6 +7,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Optional, TextIO
 
+import aimrun
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
@@ -55,6 +56,10 @@ def main(cfg: TrainConfig) -> None:
     if cfg.run_name is None:
         raise OLMoConfigurationError("--run_name is required")
     log_extra_field("run_name", cfg.run_name)
+
+    # Maybe start aim run.
+    if cfg.aim.experiment is not None:
+        aimrun.init(repo=cfg.aim.repo, experiment=cfg.aim.experiment, args=cfg.asdict(), sync_repo=cfg.aim.sync_repo, sync_args=cfg.aim.sync_args.__dict__, run_hash=cfg.aim.run_hash)
 
     # Sanity check
     if (cfg.reset_optimizer_state or cfg.reset_trainer_state) and cfg.load_path is None:
@@ -140,6 +145,11 @@ def main(cfg: TrainConfig) -> None:
     log.info(f"Total number of parameters: {olmo_model.num_params():,d}")
     log.info(f"Number of non-embedding parameters: {olmo_model.num_params(include_embedding=False):,d}")
     log.info(f"Peak GPU Memory (MB) before {cfg.distributed_strategy}: {int(peak_gpu_memory() or 0)}")
+    if cfg.bitlinear:
+        log.info(f"Bitlinearizing model to 1.58 bits: {olmo_model}")
+        from bitlinear import bitlinearize
+        bitlinearize(olmo_model, replacements=[x.__dict__ for x in cfg.bitlinear])
+        log.info(f"Bilinear model: {olmo_model}")
 
     # Compile one block at a time.
     if cfg.compile is not None:
@@ -354,6 +364,7 @@ def main(cfg: TrainConfig) -> None:
                 sharded_checkpointer=cfg.load_path_sharded_checkpointer,
             )
             log.info("Checkpoint successfully loaded")
+            log.info(f"Loaded model: {trainer.dist_model}")
 
             # If we have to, set a new scheduler:
             if cfg.reset_optimizer_state and not cfg.reset_trainer_state:

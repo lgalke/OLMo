@@ -50,6 +50,7 @@ train = [
     "datasets",
     "scikit-learn",
     "msgspec>=0.14.0",
+    "aimrun",
 ]
 all = [
     "ai2-olmo[dev,train]",

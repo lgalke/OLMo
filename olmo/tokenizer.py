@@ -72,7 +72,8 @@ class Tokenizer:
                     pad_token_id=config.model.pad_token_id,
                 )
         else:
-            tokenizer = cls.from_pretrained(
+            from transformers import AutoTokenizer
+            tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_identifier,
                 eos_token_id=config.model.eos_token_id,
                 pad_token_id=config.model.pad_token_id,

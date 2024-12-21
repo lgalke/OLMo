@@ -49,7 +49,9 @@ __all__ = [
     "SpeedMonitorConfig",
     "WandbConfig",
     "CompilerConfig",
-    "WandbConfig",
+    "AimArgsConfig",
+    "AimConfig",
+    "BitLinearConfig",
     "DDPConfig",
     "DistributedStrategy",
     "DDPGradSyncMode",
@@ -669,6 +671,27 @@ class WandbConfig(BaseConfig):
     rank_zero_only: bool = True
     log_interval: int = 1
 
+@dataclass
+class AimArgsConfig(BaseConfig):
+    repeat: int = 60
+    verbosity: int = 2
+
+@dataclass
+class AimConfig(BaseConfig):
+    repo: Optional[str] = None
+    experiment: Optional[str] = None
+    sync_repo: Optional[str] = None
+    sync_args: Optional[AimArgsConfig] = None
+    log_interval: int = 1
+    run_hash: Optional[str] = None
+
+@dataclass
+class BitLinearConfig(BaseConfig):
+    weight_range: Optional[float] = None
+    weight_measure: Optional[str] = None
+    activation_range: Optional[float] = None
+    activation_measure: Optional[str] = None
+    match_name: Optional[str] = None
 
 @dataclass
 class SpeedMonitorConfig(BaseConfig):
@@ -894,6 +917,16 @@ class ActivationCheckpointingStrategy(StrEnum):
 class TrainConfig(BaseConfig):
     """
     OLMo training configuration.
+    """
+
+    quantization_warmup_steps: Optional[int] = None
+    """
+    The number of steps to warm up quantization for.
+    """
+
+    quantization_warmup_offset: int = 0
+    """
+    The number of steps to warm up quantization for.
     """
 
     run_name: Optional[str] = None
@@ -1144,6 +1177,16 @@ class TrainConfig(BaseConfig):
     wandb: Optional[WandbConfig] = None
     """
     Weights & Biases configuration.
+    """
+
+    aim: Optional[AimConfig] = None
+    """
+    AIM configuration.
+    """
+
+    bitlinear: Optional[List[BitLinearConfig]] = None
+    """
+    BitLinear configuration.
     """
 
     speed_monitor: SpeedMonitorConfig = field(default_factory=SpeedMonitorConfig)
