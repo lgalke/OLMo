@@ -1,4 +1,4 @@
-run_name: OLMo-1B-cc-dk_safe
+run_name: OLMo-1B-cc-dk_safe-fsdp
 seed: 6198
 dry_run: false
 
