@@ -234,10 +234,10 @@ data:
   persistent_workers: true
   memmap_dtype: uint16
   timeout: 0
-#  instance_filter:
-#    repetition_max_period: 13
-#    repetition_min_period: 1
-#    repetition_max_count: 32
+  instance_filter:
+    repetition_max_period: 13
+    repetition_min_period: 1
+    repetition_max_count: 32
   paths:
     - ${oc.env:SCRATCH}/data/common_corpus/tokens-dolma2/part-00-00000.npy
     - ${oc.env:SCRATCH}/data/common_corpus/tokens-dolma2/part-00-00001.npy
