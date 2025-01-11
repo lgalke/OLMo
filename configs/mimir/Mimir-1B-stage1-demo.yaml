@@ -83,7 +83,7 @@ save_interval_ephemeral: 250
 save_num_checkpoints_to_keep: 9
 sharded_checkpointer: olmo_core
 
-save_interval_unsharded: 10000
+save_interval_unsharded: 250
 save_num_unsharded_checkpoints_to_keep: -1
 
 load_path: null
@@ -106,7 +106,7 @@ speed_monitor:
 
 gen1_gc_interval: 1
 
-eval_interval: ${save_interval_unsharded}
+eval_interval: 10000
 eval_subset_num_batches: -1
 device_eval_batch_size: ${device_train_microbatch_size}
 evaluators:
