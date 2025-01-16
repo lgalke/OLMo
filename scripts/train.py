@@ -9,6 +9,7 @@ from typing import Optional, TextIO
 
 import aimrun
 import torch
+torch._dynamo.config.optimize_ddp=False
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import wandb
