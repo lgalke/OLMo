@@ -669,6 +669,7 @@ class DeMo(torch.optim.SGD, Optimizer):
         compression_topk: int = 32,
         compression_chunk: int = 64,
         weight_decay: float = 0.0,
+        async_allgather: bool = False,
         process_group: Optional[dist.ProcessGroup] = None,
         record_update_metrics: bool = False,
         selective_updates: bool = False,
@@ -696,6 +697,7 @@ class DeMo(torch.optim.SGD, Optimizer):
         self.compression_topk = compression_topk
         self.process_group = process_group
         self.weight_decay = weight_decay
+        self.async_allgather = async_allgather
 
         if self.compression_topk <= 0:
             raise ValueError("topk_size has to be positive")
@@ -713,6 +715,12 @@ class DeMo(torch.optim.SGD, Optimizer):
         self.default_dtype = self._find_dtype()
         self.transform = TransformDCT(self.param_groups, self.compression_chunk)
         self.compress = CompressDCT()
+
+        if self.async_allgather:
+            self.sparse_idx_handle = None
+            self.sparse_val_handle = None
+            self.sparse_idx_list = None
+            self.sparse_val_list = None
 
     def _find_dtype(self):
         for group in self.param_groups:
@@ -757,6 +765,32 @@ class DeMo(torch.optim.SGD, Optimizer):
         return sparse_idx_list, sparse_val_list
 
 
+    def _async_demo_all_gather(self, sparse_idx, sparse_val):
+        world_size = dist.get_world_size() if self.process_group is None else self.process_group.size()
+
+        # Gather all the idx and vals
+        sparse_idx_list = [torch.zeros_like(sparse_idx) for wi in range(world_size)]
+        sparse_val_list = [torch.zeros_like(sparse_val) for wi in range(world_size)]
+
+        sparse_idx_handle = dist.all_gather(sparse_idx_list, sparse_idx, group=self.process_group, async_op=True)
+        sparse_val_handle = dist.all_gather(sparse_val_list, sparse_val, group=self.process_group, async_op=True)
+
+        if self.sparse_idx_handle is None or self.sparse_val_handle is None or self.sparse_idx_list is None or self.sparse_val_list is None:
+            self.sparse_idx_handle = sparse_idx_handle
+            self.sparse_val_handle = sparse_val_handle
+            self.sparse_idx_list = sparse_idx_list
+            self.sparse_val_list = sparse_val_list
+            return None, None
+        self.sparse_idx_handle.wait()
+        self.sparse_val_handle.wait()
+        res = self.sparse_idx_list, self.sparse_val_list
+        self.sparse_idx_handle = sparse_idx_handle
+        self.sparse_val_handle = sparse_val_handle
+        self.sparse_idx_list = sparse_idx_list
+        self.sparse_val_list = sparse_val_list
+        return res
+
+
     @torch.no_grad()
     def step(self, closure: Callable | None = None):
 
@@ -769,6 +803,8 @@ class DeMo(torch.optim.SGD, Optimizer):
         self._metrics["timing/in_optim_pre"] = 0.0
         self._metrics["timing/in_optim_post"] = 0.0
         _timing = time.monotonic()
+
+        first_step = False
 
         for group in self.param_groups:
             lr = group["lr"]
@@ -810,9 +846,16 @@ class DeMo(torch.optim.SGD, Optimizer):
                 self._metrics["timing/in_optim_compress"] += -_timing+(_timing:=time.monotonic())
 
                 # All-gather
-                sparse_idx_gather, sparse_val_gather = self._demo_all_gather(sparse_idx, sparse_val)
+                if self.async_allgather:
+                    sparse_idx_gather, sparse_val_gather = self._async_demo_all_gather(sparse_idx, sparse_val)
+                else:
+                    sparse_idx_gather, sparse_val_gather = self._demo_all_gather(sparse_idx, sparse_val)
 
                 self._metrics["timing/in_optim_communicate"] += -_timing+(_timing:=time.monotonic())
+
+                if sparse_idx_gather is None or sparse_val_gather is None:
+                    first_step = True
+                    continue
 
                 # Log I/O data size
                 if dist.get_world_size() > 1:
@@ -840,6 +883,8 @@ class DeMo(torch.optim.SGD, Optimizer):
                 self._metrics["timing/in_optim_post"] += -_timing+(_timing:=time.monotonic())
 
         # SGD step
+        if first_step:
+            return None
         _res = super().step(closure)
         self._metrics["timing/in_optim_sgd"] = -_timing+(_timing:=time.monotonic())
         return _res

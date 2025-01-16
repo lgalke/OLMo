@@ -549,6 +549,10 @@ class OptimizerConfig(BaseConfig):
     Size of the chunk of the gradients, note that 2D gradients are chunked in 2D, which the topk sparsity is squared compared to 1D
     """
 
+    async_allgather: bool = False
+    """
+    Whether to use allgather asynchronously in DeMo.
+    """
 
     def __post_init__(self):
         self.betas = tuple(self.betas)  # type: ignore[assignment]
