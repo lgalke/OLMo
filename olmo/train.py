@@ -1119,6 +1119,16 @@ class Trainer:
                             break
                 except (RequestException, CommError):
                     log.info("Failed to check if W&B run is cancelled, continuing run.")
+            else:
+                try:
+                    if os.exists(Path(self.cfg.save_folder) / "cancel")
+                        limit = int(open(Path(self.cfg.save_folder) / "cancel").read())
+                        if self.global_step >= limit:
+                            should_cancel = True
+                            cancel_reason = "save_folder cancel file with limit {limit} at {self.global_step}"
+                            extra_steps = 0
+                except:
+                    log.info("Failed to check save_folder cancel file")
 
         run_canceled = synchronize_flag(should_cancel, self.device)
         if run_canceled:
