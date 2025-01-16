@@ -829,6 +829,7 @@ class Trainer:
         return ce_batch_loss, z_batch_loss
 
     def train_step(self, batch: Dict[str, Any], reduce_global_loss: bool = True) -> Dict[str, float]:
+        _timing = time.monotonic()
         metrics: Dict[str, float] = {}
 
         # Set quantization rate lambda_.
@@ -859,8 +860,12 @@ class Trainer:
         # Move tensors to the right device.
         batch = move_to_device(batch, self.device)
 
+        metrics["timing/in_step_pre_pass"] = -_timing+(_timing:=time.monotonic())
+
         # Run forward-backward pass.
         ce_batch_loss, z_batch_loss = self.train_batch(batch)
+
+        metrics["timing/in_step_in_pass"] = -_timing+(_timing:=time.monotonic())
 
         # Collect loss, potentially reducing over all ranks.
         if reduce_global_loss:
@@ -869,6 +874,8 @@ class Trainer:
             if z_batch_loss is not None:
                 dist.reduce(z_batch_loss, 0)
                 z_batch_loss.div_(get_world_size())
+
+        metrics["timing/in_step_collect_loss"] = -_timing+(_timing:=time.monotonic())
 
         # Clip gradient norms and collect param/gradient/optim metrics.
         should_log_optim_metrics_this_step = self.should_log_optim_metrics_this_step()
@@ -879,6 +886,8 @@ class Trainer:
             # HYBRID sharding.
             process_group=self.dist_model.process_group,
         )
+
+        metrics["timing/in_step_clip_grads_collect_metrics"] = -_timing+(_timing:=time.monotonic())
 
         # Adjust the learning rate.
         for group in self.optim.param_groups:
@@ -895,8 +904,14 @@ class Trainer:
                 self.cfg.max_grad_norm_ratio, self.scheduler_current, self.scheduler_max
             )
 
+        metrics["timing/in_step_adjust_lr"] = -_timing+(_timing:=time.monotonic())
+
+        self.optim._metrics = metrics
+
         # Optimizer step.
         self.optim.step()
+
+        metrics["timing/in_step_in_optim"] = -_timing+(_timing:=time.monotonic())
 
         # Collect metrics and check for NaN loss.
         # NOTE: this involves a bunch of host-device syncs so we wait until the last moment to do this.
@@ -921,6 +936,7 @@ class Trainer:
             for key, value in optim_metrics.items():
                 metrics[f"optim/{key}"] = value.item()
 
+        metrics["timing/in_step_post_optim"] = -_timing+(_timing:=time.monotonic())
         return metrics
 
     def eval_batch(self, batch: Dict[str, Any]) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -994,7 +1010,8 @@ class Trainer:
                 [
                     f"    {name}={format_float(value)}"
                     for name, value in metrics.items()
-                    if name == "optim/total_grad_norm"
+                    if name in ("optim/total_grad_norm", "optim/data_receive", "optim/data_transmit")
+                    or "timing/" in name
                     or not name.startswith("optim/")  # there's too many optimizer metrics
                 ]
             )
@@ -1212,7 +1229,11 @@ class Trainer:
 
         with torch_profiler as p:
             for epoch in range(self.epoch or 0, self.max_epochs):
+                _timing = time.monotonic()
+                _metrics = {}
+                _orig_timing = _timing
                 for batch in self.train_loader:
+                    _metrics["timing/pre_load"] = -_timing+(_timing:=time.monotonic())
                     # Bookkeeping.
                     # NOTE: To track the global batch size / number of tokens per batch we make the assumption that all
                     # batches see the same number of tokens, which should be the case for language model pre-training
@@ -1239,8 +1260,13 @@ class Trainer:
 
                     should_log_this_step = self.should_log_this_step()
 
+                    _metrics["timing/pre_step"] = -_timing+(_timing:=time.monotonic())
+
                     # Run train step on batch.
                     metrics = self.train_step(batch, reduce_global_loss=should_log_this_step)
+
+                    metrics.update(_metrics)
+                    metrics["timing/step"] = -_timing+(_timing:=time.monotonic())
 
                     # Maybe collect other metrics.
                     if should_log_this_step:
@@ -1251,6 +1277,8 @@ class Trainer:
                         # Learning rate metrics.
                         metrics.update(lr_monitor.check())
 
+                    metrics["timing/collect_metrics"] = -_timing+(_timing:=time.monotonic())
+
                     # Log metrics to console.
                     if self.global_step % self.cfg.console_log_interval == 0:
                         if get_global_rank() == 0:
@@ -1260,6 +1288,9 @@ class Trainer:
                             )
                         else:
                             log.info(f"[step={self.global_step}/{self.max_steps},epoch={epoch}]")
+
+                    _metrics = {}
+                    _metrics["timing/prev_log_console"] = -_timing+(_timing:=time.monotonic())
 
                     # Log metrics to W&B.
                     if (
@@ -1273,6 +1304,8 @@ class Trainer:
                         and self.global_step % self.cfg.aim.log_interval == 0
                     ):
                         aimrun.track(metrics, step=self.global_step)
+
+                    _metrics["timing/prev_log_tracker"] = -_timing+(_timing:=time.monotonic())
 
                     # Check if/when run should be canceled.
                     if not cancel_initiated and self.global_step % self.cfg.canceled_check_interval == 0:
@@ -1356,9 +1389,13 @@ class Trainer:
                     if self.global_step >= stop_at:
                         break
 
+                    _metrics["timing/prev_save_eval"] = -_timing+(_timing:=time.monotonic())
+
                     # Run generation 1 garbage collection.
                     if self.cfg.gen1_gc_interval is not None and self.global_step % self.cfg.gen1_gc_interval == 0:
                         gc.collect(1)
+
+                    _metrics["timing/prev_garbage_collect"] = -_timing+(_timing:=time.monotonic())
 
                     # Python Profiler stuff
                     # We do this now, at the bottom of this loop, so we capture the work of getting the next batch.
@@ -1369,6 +1406,10 @@ class Trainer:
                             python_profiler.disable()
                             python_profiler.print_stats(sort=SortKey.CUMULATIVE)
                             python_profiler = None
+                    _end = time.monotonic()
+                    _metrics["timing/prev_profiler"] = -_timing+(_timing:=time.monotonic())
+                    _metrics["timing/prev_total_step"] = -_orig_timing+(_orig_timing:=time.monotonic())
+
                 else:
                     log.info("Training epoch complete")
                     self.epoch = epoch + 1

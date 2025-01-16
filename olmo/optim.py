@@ -1,4 +1,5 @@
 import logging
+import time
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, replace
 from math import cos, pi, sqrt
@@ -59,6 +60,8 @@ class Optimizer(OptimizerBase):
         Clips gradients for every group that has the field `max_grad_norm`.
         At the same time collect metrics for each parameter and its gradient.
         """
+        _timing = time.monotonic()
+        _metrics = {}
         self._collecting_metrics = collect_param_metrics
         device = get_default_device() if device is None else device
 
@@ -87,6 +90,8 @@ class Optimizer(OptimizerBase):
         dst_rank = 0
         if process_group is not None:
             dst_rank = dist.get_global_rank(process_group, 0)
+
+        _metrics["timing/clip_pre"] = torch.tensor(-_timing+(_timing:=time.monotonic()), device="cpu")
 
         #######################################################################
         # part 1: collect metrics locally
@@ -149,6 +154,8 @@ class Optimizer(OptimizerBase):
 
         def is_grad_norm_metric(metric_name: str) -> bool:
             return metric_name.startswith("grad/") and metric_name.endswith(".norm")
+
+        _metrics["timing/clip_collect_locally"] = torch.tensor(-_timing+(_timing:=time.monotonic()), device="cpu")
 
         #######################################################################
         # part 2: reduce metrics over ranks
@@ -222,6 +229,8 @@ class Optimizer(OptimizerBase):
             all_metrics[metric_name] = metric.squeeze(0)
         all_metrics["total_grad_norm"] = total_grad_norm
 
+        _metrics["timing/clip_communicate"] = torch.tensor(-_timing+(_timing:=time.monotonic()), device="cpu")
+
         #######################################################################
         # part 3: clip grads
         #######################################################################
@@ -249,6 +258,9 @@ class Optimizer(OptimizerBase):
             else:
                 clipping_rate = torch.tensor(0.0, device="cpu")
             all_metrics["clipping_rate"] = clipping_rate
+
+        _metrics["timing/clip_clip"] = torch.tensor(-_timing+(_timing:=time.monotonic()), device="cpu")
+        all_metrics.update(_metrics)
 
         # total_grad_norm is computed at all steps, even when collect_param_metrics is set to False
         return all_metrics
@@ -751,11 +763,19 @@ class DeMo(torch.optim.SGD, Optimizer):
         self.data_transmit = 0
         self.data_receive = 0
 
+        self._metrics["timing/in_optim_communicate"] = 0.0
+        self._metrics["timing/in_optim_compress"] = 0.0
+        self._metrics["timing/in_optim_decompress"] = 0.0
+        self._metrics["timing/in_optim_pre"] = 0.0
+        self._metrics["timing/in_optim_post"] = 0.0
+        _timing = time.monotonic()
+
         for group in self.param_groups:
             lr = group["lr"]
             for p in group["params"]:
                 if not p.requires_grad:
                     continue
+
                 state = self._state_parameter(p)
 
                 # Update step
@@ -772,6 +792,8 @@ class DeMo(torch.optim.SGD, Optimizer):
                 # Add delta to new gradient
                 state["delta"].add_(p.grad, alpha=lr)
 
+                self._metrics["timing/in_optim_pre"] += -_timing+(_timing:=time.monotonic())
+
                 # Compress delta
                 sparse_idx, sparse_val, xshape, totalk = self.compress.compress(
                     self.transform.encode(state["delta"]), self.compression_topk
@@ -785,18 +807,26 @@ class DeMo(torch.optim.SGD, Optimizer):
                 # Remove transmitted from delta
                 state["delta"].sub_(transmit_grad)
 
+                self._metrics["timing/in_optim_compress"] += -_timing+(_timing:=time.monotonic())
+
                 # All-gather
                 sparse_idx_gather, sparse_val_gather = self._demo_all_gather(sparse_idx, sparse_val)
 
+                self._metrics["timing/in_optim_communicate"] += -_timing+(_timing:=time.monotonic())
+
                 # Log I/O data size
-                self.data_transmit += sparse_idx.nbytes + sparse_val.nbytes
-                for si, v in zip(sparse_idx_gather, sparse_val_gather):
-                    self.data_receive += si.nbytes + v.nbytes
+                if dist.get_world_size() > 1:
+                    self.data_transmit += sparse_idx.nbytes + sparse_val.nbytes
+                for i, (si, v) in enumerate(zip(sparse_idx_gather, sparse_val_gather)):
+                    if i != dist.get_rank(self.process_group):
+                        self.data_receive += si.nbytes + v.nbytes
 
                 # Decode grad from all nodes
                 new_grad = self.transform.decode(
                     self.compress.batch_decompress(p, sparse_idx_gather, sparse_val_gather, xshape, totalk)
                 )
+
+                self._metrics["timing/in_optim_decompress"] += -_timing+(_timing:=time.monotonic())
 
                 # Set grad to values
                 if p.grad is None:
@@ -807,8 +837,12 @@ class DeMo(torch.optim.SGD, Optimizer):
                 # Sign-SGD
                 p.grad.sign_()
 
+                self._metrics["timing/in_optim_post"] += -_timing+(_timing:=time.monotonic())
+
         # SGD step
-        return super().step(closure)
+        _res = super().step(closure)
+        self._metrics["timing/in_optim_sgd"] = -_timing+(_timing:=time.monotonic())
+        return _res
 
 
     def get_post_step_metrics(
