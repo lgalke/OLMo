@@ -1121,7 +1121,7 @@ class Trainer:
                     log.info("Failed to check if W&B run is cancelled, continuing run.")
             else:
                 try:
-                    if os.exists(Path(self.cfg.save_folder) / "cancel"):
+                    if os.path.exists(Path(self.cfg.save_folder) / "cancel"):
                         limit = int(open(Path(self.cfg.save_folder) / "cancel").read())
                         if self.global_step >= limit:
                             should_cancel = True
